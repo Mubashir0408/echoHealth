@@ -1,0 +1,16 @@
+.venv/
+.deps/
+__pycache__/
+*.py[cod]
+models/*
+!models/.gitkeep
+samples/*
+!samples/.gitkeep
+reports/*
+!reports/.gitkeep
+*.egg-info/
+build/
+data/
+*.sqlite3*
+dist/
+.tmp/

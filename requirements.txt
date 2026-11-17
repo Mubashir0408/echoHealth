@@ -1,0 +1,9 @@
+# Python 3.10-3.12, x64. Compatibility baseline; not yet installed on this host.
+numpy==1.26.4
+scipy==1.13.1
+soundfile==0.12.1
+tensorflow==2.16.1
+fastapi==0.115.6
+uvicorn==0.34.0
+websockets==14.1
+pydantic==2.10.4

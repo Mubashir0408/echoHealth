@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools==75.6.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "echohealth"
+version = "0.1.0"
+description = "Offline YAMNet audio event proof of concept; not a diagnostic device"
+requires-python = ">=3.10,<3.13"
+dynamic = ["dependencies"]
+
+[project.scripts]
+echohealth = "echohealth.cli:main"
+echohealth-server = "echohealth.server:main"
+
+[tool.setuptools.package-data]
+echohealth = ["web/*.html", "web/*.css", "web/*.js"]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+
+[tool.setuptools.packages.find]
+include = ["echohealth*"]

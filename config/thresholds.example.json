@@ -1,0 +1,12 @@
+{
+  "threshold": 0.3,
+  "thresholds": {
+    "Cough": 0.3,
+    "Wheeze": 0.3,
+    "Breathing": 0.3,
+    "Sneeze": 0.3,
+    "Snoring": 0.3,
+    "Gasp": 0.3,
+    "Throat clearing": 0.3
+  }
+}
