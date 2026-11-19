@@ -1,5 +1,5 @@
 import { EVENT_TYPES } from '../api/types';
-import type { EventType, RespiratoryEvent, Session } from '../api/types';
+import type { EventType, RespiratoryEvent, SessionRow } from '../api/types';
 import { formatOffset } from './format';
 import { isKnownType } from './events';
 
@@ -67,24 +67,6 @@ export function findPeakPeriods(events: RespiratoryEvent[], durationSeconds: num
     }));
 }
 
-/** Most recent event of each type — used to show the latest model scores. */
-export function latestByType(events: RespiratoryEvent[]): RespiratoryEvent[] {
-  const map = new Map<string, RespiratoryEvent>();
-  for (const e of events) {
-    const prev = map.get(e.type);
-    if (!prev || e.offsetSeconds >= prev.offsetSeconds) map.set(e.type, e);
-  }
-  return [...map.values()].sort((a, b) => b.offsetSeconds - a.offsetSeconds);
-}
-
-export function sortSessionsNewest(sessions: Session[]): Session[] {
-  return [...sessions].sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt));
-}
-
-/** Live elapsed time computed from startedAt so the timer ticks smoothly between polls. */
-export function elapsedSeconds(session: Session, now = Date.now()): number {
-  if (session.status !== 'recording') return session.durationSeconds;
-  const started = Date.parse(session.startedAt);
-  if (Number.isNaN(started)) return session.durationSeconds;
-  return Math.max(session.durationSeconds, (now - started) / 1000);
+export function sortRowsNewest(rows: SessionRow[]): SessionRow[] {
+  return [...rows].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
 }

@@ -1,7 +1,7 @@
 import { NavLink, Outlet } from 'react-router-dom';
-import { Activity, FlaskConical, History, LayoutDashboard } from 'lucide-react';
-import { IS_MOCK_API, api } from '../api/client';
+import { Activity, History, LayoutDashboard } from 'lucide-react';
 import { useHealth } from '../hooks/HealthContext';
+import { useMonitor } from '../monitor/MonitorContext';
 import { Badge, cx } from './ui';
 
 function Logo() {
@@ -34,27 +34,17 @@ const NAV = [
 ];
 
 function ConnectionBadge() {
-  const { connection } = useHealth();
+  const { connection, modelReady } = useHealth();
   if (connection === 'checking') return <Badge tone="neutral" dot>Connecting…</Badge>;
-  if (connection === 'online') return <Badge tone="ok" dot>Backend online</Badge>;
-  return <Badge tone="bad" dot>Backend offline</Badge>;
+  if (connection === 'offline') return <Badge tone="bad" dot>Backend offline</Badge>;
+  if (!modelReady) return <Badge tone="warn" dot>Model unavailable</Badge>;
+  return <Badge tone="ok" dot>Model ready · local</Badge>;
 }
 
 export function Layout() {
+  const { active } = useMonitor();
   return (
     <div className="min-h-screen">
-      {IS_MOCK_API && (
-        <div className="no-print sticky top-0 z-30 border-b border-amber-400/25 bg-amber-400/10 backdrop-blur">
-          <div className="mx-auto flex max-w-7xl items-center gap-2 px-4 py-2 text-xs text-amber-200 sm:px-6">
-            <FlaskConical className="h-4 w-4 shrink-0" />
-            <span>
-              <strong className="font-semibold">Demo Mode</strong> — using the in-browser mock API. All audio levels,
-              detections and scores are simulated, not real microphone input or AI predictions.
-            </span>
-          </div>
-        </div>
-      )}
-
       <header className="no-print border-b border-white/5 bg-navy-950/60 backdrop-blur">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <Logo />
@@ -73,10 +63,11 @@ export function Layout() {
               >
                 <Icon className="h-4 w-4" />
                 {label}
+                {to === '/live' && active && <span className="h-2 w-2 animate-pulse rounded-full bg-rose-400" aria-label="Monitoring active" />}
               </NavLink>
             ))}
           </nav>
-          <div className="flex items-center gap-2" title={`API: ${api.baseUrl}`}>
+          <div className="flex items-center gap-2">
             <ConnectionBadge />
           </div>
         </div>

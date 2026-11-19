@@ -1,74 +1,66 @@
-# EchoHealth — Frontend
+# EchoHealth — React frontend
 
-React + TypeScript + Vite + Tailwind CSS + Recharts + Lucide.
-Local-only dashboard for the EchoHealth respiratory sound monitor. It is **not** a diagnostic tool.
+React + TypeScript + Vite + Tailwind CSS + Recharts + Lucide. A dashboard for the local EchoHealth
+Python backend (`echohealth.server`). Not a diagnostic tool.
 
-## Run
+## Run (two terminals)
 
-```bash
-cd frontend
-npm install
+```powershell
+# 1) Backend: project root
+.\.venv\Scripts\python.exe -m echohealth.server      # http://127.0.0.1:8000
 
-npm run dev        # real backend at VITE_API_URL (default http://127.0.0.1:8000)
-npm run dev:demo   # in-browser mock API, labelled "Demo Mode" everywhere
-npm run build      # type-check + production build into dist/
-npm run preview    # serve the production build
+# 2) Frontend: frontend/
+npm install          # first time only
+npm run dev          # http://127.0.0.1:5173 (opens the browser)
 ```
 
-Open http://127.0.0.1:5173
+Other commands: `npm run build` (type-check + production build), `npm run preview` (serves the build on
+http://127.0.0.1:4173 with the same proxy).
 
-## Configuration
+## How it connects
 
-Copy `.env.example` to `.env` and set:
+The backend sends no CORS headers and rejects any request whose `Origin` is not its own. So the browser
+talks only to the Vite server, which proxies to the backend (`vite.config.ts`):
 
-| Variable        | Default                  | Meaning                                                  |
-| --------------- | ------------------------ | -------------------------------------------------------- |
-| `VITE_API_URL`  | `http://127.0.0.1:8000`  | Backend base URL                                         |
-| `VITE_API_MODE` | `http`                   | `http` = real backend, `mock` = in-browser Demo Mode API |
+| Path | Backend use |
+| --- | --- |
+| `/api/*` | REST endpoints and the `/api/monitor` WebSocket |
+| `/static/pcm-worklet.js` | The backend's own AudioWorklet, reused for PCM conversion |
 
-The client is chosen once at startup in `src/api/client.ts`. If the real backend is unreachable, the UI shows
-**Backend offline**. It never falls back to mock data on its own.
+The proxy forwards only same-origin requests (or ones with no `Origin`) and refuses requests from
+other websites with HTTP 403, so the backend's cross-origin protection still holds. Change the backend
+address with `VITE_API_URL` in `frontend/.env` (see `.env.example`).
 
-## Backend integration checklist
+## Backend API used
 
-1. **CORS.** The frontend runs on `http://127.0.0.1:5173` (or `http://localhost:5173`), so the backend must allow
-   that origin. For FastAPI:
+| Feature | Endpoint |
+| --- | --- |
+| Readiness | `GET /api/health`: `status` `ready`/`unavailable`, `detail` |
+| Live monitoring | WebSocket `/api/monitor`: send `{"threshold"}`, receive `ready`, send 1.95 s 16 kHz int16 PCM chunks, receive `result` (segment report and cumulative summary), send `stop`, receive `stopped` |
+| File analysis | `POST /api/analyze?threshold=` with the raw file as the body |
+| History | `GET /api/sessions` (id, date, source, duration, status) |
+| Report | `GET /api/sessions/{id}` (all segment reports and the server-computed summary) |
+| Delete | `DELETE /api/sessions/{id}` (409 while active) |
 
-   ```python
-   from fastapi.middleware.cors import CORSMiddleware
-   app.add_middleware(
-       CORSMiddleware,
-       allow_origins=["http://127.0.0.1:5173", "http://localhost:5173"],
-       allow_methods=["*"],
-       allow_headers=["*"],
-   )
-   ```
-
-2. **Contract.** `src/api/types.ts` mirrors the fixed contract exactly: `/api/health`, `/api/monitor/start|stop|status`
-   and `/api/sessions[/{id}]`. Errors must be JSON with a `detail` string (FastAPI's `HTTPException` already does this).
-3. **Event types** must be one of `cough, wheezing, breathing, sneezing, snoring, gasping, throat_clearing`. Unknown
-   types still render, in grey.
-4. **Timestamps** must be ISO 8601 UTC, e.g. `2026-11-17T09:30:00Z`.
-5. **Stop.** `POST /api/monitor/stop` with no active session should return 4xx with a `detail` message.
-6. **Demo mode.** The Overview's "Run demo session" button sends `{"mode":"demo"}` to the real backend. Sessions with
-   `mode: "demo"` are badged "Demo" in the UI.
-
-## Behaviour notes
-
-- **Polling.** Live view polls `GET /api/monitor/status` every 750 ms using a chained timeout, so requests never
-  overlap. Polling stops on unmount and while stopping. Health is checked every 5 s.
-- **Audio visualisation.** Each bar is one real `audioLevel` value received from the backend. Nothing is interpolated.
-- **Scores.** Shown as uncalibrated model scores, never as medical probabilities.
-- **Session ended elsewhere.** If the backend stops a session, the live view redirects to its report.
-- **Reports.** Print uses a print stylesheet. CSV/JSON export is generated in the browser.
+Microphone readiness is checked in the browser, because the backend receives audio from this page.
+The audio level meter shows the level measured by the browser. Sound labels come only from backend results.
 
 ## Structure
 
 ```
 src/
-  api/        types.ts (contract) · httpClient.ts · mockClient.ts (Demo Mode) · client.ts (switch)
-  hooks/      usePolling · useAsync · HealthContext
-  lib/        events (labels/colours) · format · analysis (buckets/peaks) · export (CSV/JSON)
+  api/        types.ts (backend wire + view types) · client.ts (REST) · adapters.ts (backend → view)
+  monitor/    MonitorContext.tsx (microphone + WebSocket protocol, lives at app root)
+  hooks/      HealthContext · usePolling · useAsync · useSessionDetails (cached per-session summaries)
+  lib/        events · format · analysis · export (CSV/JSON)
   components/ Layout · ui · AudioLevelMeter · ActivityChart · BreakdownChart · CountGrid · EventTimeline · ScoreBars
   pages/      Overview · Live · Report · History
 ```
+
+## Known limitations
+
+- `GET /api/sessions` has no event counts, so History and Overview fetch each session's full detail
+  (one at a time, cached, newest 20 or 7). Long sessions have large detail payloads because they include
+  every model score.
+- It needs the Vite server (dev or preview) for the proxy. The backend does not serve the React build.
+- Counts are merged model spans, not clinical episodes. Scores are uncalibrated.

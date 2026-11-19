@@ -1,4 +1,4 @@
-import type { Session } from '../api/types';
+import type { Session, SessionDetail } from '../api/types';
 import { eventMeta } from './events';
 
 function download(filename: string, content: string, mime: string) {
@@ -13,10 +13,12 @@ function download(filename: string, content: string, mime: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-const baseName = (s: Session) => `echohealth-session-${s.startedAt.slice(0, 19).replace(/[:T]/g, '-')}`;
+const baseName = (startedAt: string) =>
+  `echohealth-session-${(startedAt || 'unknown').slice(0, 19).replace(/[:T]/g, '-')}`;
 
-export function exportSessionJson(session: Session) {
-  download(`${baseName(session)}.json`, JSON.stringify(session, null, 2), 'application/json');
+/** Complete backend session (all segment reports, scores and summary), as the backend's own export does. */
+export function exportSessionJson(detail: SessionDetail) {
+  download(`${baseName(detail.created_at)}.json`, JSON.stringify(detail, null, 2), 'application/json');
 }
 
 const csvCell = (v: string | number) => {
@@ -24,17 +26,17 @@ const csvCell = (v: string | number) => {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 
+/** Merged respiratory spans from the session summary timeline. */
 export function exportSessionCsv(session: Session) {
-  const header = ['event_id', 'type', 'label', 'timestamp_utc', 'offset_seconds', 'duration_seconds', 'model_score'];
+  const header = ['type', 'label', 'start_seconds', 'end_seconds', 'duration_seconds', 'peak_model_score'];
   const rows = session.events.map((e) => [
-    e.id,
     e.type,
     eventMeta(e.type).label,
-    e.timestamp,
-    e.offsetSeconds,
-    e.durationSeconds,
-    e.score,
+    e.offsetSeconds.toFixed(2),
+    (e.offsetSeconds + e.durationSeconds).toFixed(2),
+    e.durationSeconds.toFixed(2),
+    e.score.toFixed(4),
   ]);
   const csv = [header, ...rows].map((r) => r.map(csvCell).join(',')).join('\r\n');
-  download(`${baseName(session)}.csv`, csv, 'text/csv');
+  download(`${baseName(session.startedAt)}.csv`, csv, 'text/csv');
 }

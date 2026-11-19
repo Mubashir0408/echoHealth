@@ -1,6 +1,6 @@
 import type { RespiratoryEvent } from '../api/types';
 import { eventMeta } from '../lib/events';
-import { formatOffset, formatScore, formatTime } from '../lib/format';
+import { formatOffset, formatScore } from '../lib/format';
 import { EmptyState, SCORE_NOTE } from './ui';
 import { Waves } from 'lucide-react';
 
@@ -37,13 +37,15 @@ export function EventTimeline({
                 <div className="min-w-0">
                   <div className="text-sm font-semibold text-ink">{meta.label}</div>
                   <div className="mt-0.5 text-xs text-ink-faint">
-                    <span className="font-mono">{formatOffset(e.offsetSeconds)}</span> into session ·{' '}
-                    {formatTime(e.timestamp)} · {e.durationSeconds.toFixed(1)}s
+                    <span className="font-mono">
+                      {formatOffset(e.offsetSeconds)}–{formatOffset(e.offsetSeconds + e.durationSeconds)}
+                    </span>{' '}
+                    into analyzed audio · {e.durationSeconds.toFixed(1)}s span
                   </div>
                 </div>
                 <div className="text-right" title={SCORE_NOTE}>
                   <div className="font-mono text-sm text-ink">{formatScore(e.score)}</div>
-                  <div className="text-[10px] uppercase tracking-wide text-ink-faint">score</div>
+                  <div className="text-[10px] uppercase tracking-wide text-ink-faint">peak score</div>
                 </div>
               </div>
             </li>

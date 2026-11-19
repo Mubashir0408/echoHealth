@@ -1,5 +1,5 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
-import { AlertTriangle, FlaskConical, Inbox, Loader2, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Inbox, Loader2, RefreshCw } from 'lucide-react';
 
 export function cx(...classes: (string | false | null | undefined)[]) {
   return classes.filter(Boolean).join(' ');
@@ -100,15 +100,6 @@ export function Badge({ tone = 'neutral', dot, children }: { tone?: Tone; dot?: 
     >
       {dot && <span className={cx('h-1.5 w-1.5 rounded-full', dotClasses[tone])} />}
       {children}
-    </span>
-  );
-}
-
-export function DemoBadge({ label = 'Demo Mode' }: { label?: string }) {
-  return (
-    <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-amber-400/15 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-amber-300 ring-1 ring-inset ring-amber-400/30">
-      <FlaskConical className="h-3.5 w-3.5" />
-      {label}
     </span>
   );
 }

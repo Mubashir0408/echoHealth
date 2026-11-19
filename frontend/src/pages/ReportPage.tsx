@@ -1,8 +1,10 @@
 import { useMemo } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, Braces, FileSpreadsheet, FileX, Printer } from 'lucide-react';
-import { IS_MOCK_API, api } from '../api/client';
+import { api } from '../api/client';
+import { sourceLabel, toSession } from '../api/adapters';
 import { useAsync } from '../hooks/useAsync';
+import { useMonitor } from '../monitor/MonitorContext';
 import { findPeakPeriods } from '../lib/analysis';
 import { EVENT_META, totalEvents } from '../lib/events';
 import { formatDateTime, formatDuration, formatOffset } from '../lib/format';
@@ -10,7 +12,7 @@ import { exportSessionCsv, exportSessionJson } from '../lib/export';
 import { ActivityChart } from '../components/ActivityChart';
 import { BreakdownChart } from '../components/BreakdownChart';
 import { EventTimeline } from '../components/EventTimeline';
-import { Badge, Button, Card, DemoBadge, Disclaimer, EmptyState, Spinner, Stat } from '../components/ui';
+import { Badge, Button, Card, Disclaimer, EmptyState, Spinner, Stat } from '../components/ui';
 import type { Tone } from '../components/ui';
 
 const STATUS_TONE: Record<string, Tone> = {
@@ -22,16 +24,17 @@ const STATUS_TONE: Record<string, Tone> = {
 
 export function ReportPage() {
   const { sessionId = '' } = useParams();
-  const q = useAsync((signal) => api.getSession(sessionId, signal), [sessionId]);
-  const session = q.data;
-  const peaks = useMemo(
-    () => (session ? findPeakPeriods(session.events, session.durationSeconds) : []),
-    [session],
-  );
+  const { state: monitorState } = useMonitor();
+  // Re-fetch when a live session for this id finishes so the report shows the final status.
+  const liveHere = monitorState.sessionId === sessionId;
+  const q = useAsync((signal) => api.getSession(sessionId, signal), [sessionId, liveHere]);
+  const detail = q.data;
+  const session = useMemo(() => (detail ? toSession(detail, detail.summary) : null), [detail]);
+  const peaks = useMemo(() => (session ? findPeakPeriods(session.events, session.durationSeconds) : []), [session]);
 
   if (q.loading && !session) return <Spinner label="Loading report…" />;
 
-  if (q.error || !session) {
+  if (q.error || !session || !detail) {
     return (
       <Card>
         <EmptyState
@@ -51,8 +54,10 @@ export function ReportPage() {
     );
   }
 
+  const summary = detail.summary;
   const total = totalEvents(session.counts);
-  const isDemo = IS_MOCK_API || session.mode === 'demo';
+  const shortRecording = session.durationSeconds < 60;
+  const clusters = summary?.clusters ?? [];
 
   return (
     <div className="report space-y-6">
@@ -67,7 +72,7 @@ export function ReportPage() {
           <Button icon={<FileSpreadsheet className="h-4 w-4" />} onClick={() => exportSessionCsv(session)}>
             Export CSV
           </Button>
-          <Button icon={<Braces className="h-4 w-4" />} onClick={() => exportSessionJson(session)}>
+          <Button icon={<Braces className="h-4 w-4" />} onClick={() => exportSessionJson(detail)}>
             Export JSON
           </Button>
         </div>
@@ -79,31 +84,36 @@ export function ReportPage() {
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Session report</p>
             <h1 className="mt-2 text-2xl font-bold tracking-tight text-ink sm:text-3xl">{formatDateTime(session.startedAt)}</h1>
             <p className="mt-1 text-sm text-ink-faint">
-              {formatDateTime(session.startedAt)} → {session.endedAt ? formatDateTime(session.endedAt) : 'in progress'}
+              {sourceLabel(session.source)} · {detail.reports.length} analyzed segment{detail.reports.length === 1 ? '' : 's'} · YAMNet, local
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {isDemo && <DemoBadge label={IS_MOCK_API ? 'Demo Mode — simulated data' : 'Demo session'} />}
+            <Badge tone="neutral">{sourceLabel(session.source)}</Badge>
             <Badge tone={STATUS_TONE[session.status] ?? 'neutral'} dot>
               {session.status}
             </Badge>
           </div>
         </div>
         <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4">
-          <Stat label="Monitoring duration" value={formatDuration(session.durationSeconds)} />
-          <Stat label="Detected events" value={total} />
-          <Stat label="Coughs (estimated)" value={session.counts.cough ?? 0} accent={EVENT_META.cough.color} />
+          <Stat label="Analyzed audio" value={formatDuration(session.durationSeconds)} />
+          <Stat label="Respiratory spans" value={total} />
+          <Stat label="Coughs (estimated)" value={session.counts?.cough ?? 0} accent={EVENT_META.cough.color} />
           <Stat
-            label="Events per hour"
-            value={session.durationSeconds >= 60 ? ((total / session.durationSeconds) * 3600).toFixed(1) : '—'}
-            hint={session.durationSeconds < 60 ? 'Needs ≥ 1 min of data' : undefined}
+            label="Spans per hour"
+            value={summary?.events_per_hour == null ? '—' : summary.events_per_hour.toFixed(1)}
+            hint={shortRecording && summary?.events_per_hour != null ? 'Short recording: unstable extrapolation' : undefined}
           />
         </div>
+        {summary?.methodology?.contains_legacy_reports && (
+          <p className="mt-4 text-xs text-amber-200/80">
+            This session includes older reports created with the original selection rules. It has not been reclassified.
+          </p>
+        )}
       </section>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_1.4fr]">
         <Card title="Breakdown by sound type">
-          <BreakdownChart counts={session.counts} />
+          <BreakdownChart counts={session.counts ?? {}} />
         </Card>
         <Card title="Respiratory activity over time">
           <ActivityChart events={session.events} durationSeconds={session.durationSeconds} />
@@ -111,23 +121,21 @@ export function ReportPage() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_1.4fr]">
-        <Card title="Peak activity periods" subtitle="Intervals with the most detected events">
+        <Card title="Peak activity periods" subtitle="Intervals with the most detected spans">
           {peaks.length === 0 ? (
-            <EmptyState title="No peaks" message="No respiratory events were detected in this session." />
+            <EmptyState title="No peaks" message="No respiratory spans were selected in this session. This does not rule out a health problem." />
           ) : (
             <ol className="space-y-3">
               {peaks.map((p, i) => (
                 <li key={p.start} className="card-inset px-4 py-3">
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <span className="grid h-7 w-7 place-items-center rounded-lg bg-accent/10 font-mono text-xs text-accent">
-                        {i + 1}
-                      </span>
+                      <span className="grid h-7 w-7 place-items-center rounded-lg bg-accent/10 font-mono text-xs text-accent">{i + 1}</span>
                       <span className="font-mono text-sm text-ink">
                         {formatOffset(p.start)}–{formatOffset(Math.min(p.end, Math.max(session.durationSeconds, p.start + 1)))}
                       </span>
                     </div>
-                    <span className="text-sm font-semibold text-ink">{p.total} events</span>
+                    <span className="text-sm font-semibold text-ink">{p.total} spans</span>
                   </div>
                   <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 pl-10 text-xs text-ink-muted">
                     {p.breakdown.map((b) => (
@@ -141,12 +149,22 @@ export function ReportPage() {
               ))}
             </ol>
           )}
+          {clusters.length > 0 && (
+            <p className="mt-4 text-xs text-ink-faint">
+              Clusters (≥3 spans within 10 s, descriptive only):{' '}
+              {clusters.map((c) => `${formatOffset(c.start_seconds)}–${formatOffset(c.end_seconds)} (${c.event_count})`).join('; ')}
+            </p>
+          )}
         </Card>
-        <Card title="Event timeline" subtitle={`${session.events.length} events, newest first`}>
-          <EventTimeline events={session.events} maxHeight={460} emptyMessage="No respiratory events were detected." />
+        <Card title="Event timeline" subtitle={`${session.events.length} merged spans, newest first`}>
+          <EventTimeline events={session.events} maxHeight={460} emptyMessage="No respiratory spans were selected." />
         </Card>
       </div>
 
+      <p className="text-xs text-ink-faint">
+        Counts are merged model spans (touching spans of the same sound count once), not clinical episode counts. Timing is
+        approximate. Rate = spans × 3600 ÷ analyzed audio seconds.
+      </p>
       <Disclaimer />
     </div>
   );

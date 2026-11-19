@@ -1,5 +1,41 @@
 # EchoHealth — Phase 3 integration
 
+## Quick start: one command
+
+From the project root in PowerShell:
+
+```powershell
+npm run dev
+```
+
+This starts **both** servers:
+
+1. **Backend** (`.venv` Python, `-m echohealth.server`) on http://127.0.0.1:8000. The launcher waits until the AI model has loaded (`/api/health` answers) before continuing. If an EchoHealth backend is already running on port 8000, it is reused and no duplicate is started.
+2. **Frontend** (React/Vite) on http://127.0.0.1:5173. It opens in your browser and proxies `/api`, the monitoring WebSocket and `/static` to the backend.
+
+Logs are prefixed `[backend]` and `[frontend]`. If either server crashes, the launcher prints a clear error with that server's last output and stops the other one. Press **Ctrl+C** once to stop everything it started.
+
+**First-time setup** (once per machine):
+
+```powershell
+py -3.11 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+.\.venv\Scripts\python.exe -m echohealth download
+npm run setup                      # installs the frontend's npm packages
+```
+
+Other root commands:
+
+| Command | What it does |
+| --- | --- |
+| `npm run dev -- --open false` | Same as `npm run dev`, without opening a browser (extra arguments go to Vite) |
+| `npm test` | Runs the Python test suite with the project `.venv` |
+| `npm run build` | Type-checks and builds the frontend |
+
+Settings: `ECHOHEALTH_STARTUP_TIMEOUT` (seconds to wait for the backend, default 120), plus the existing `ECHOHEALTH_DATABASE` and `ECHOHEALTH_MODEL_DIR`. The launcher is `scripts/dev.mjs`: plain Node, no extra packages. If port 8000 is held by another program, the launcher stops and tells you how to find it.
+
+The backend's own built-in page is still available at http://127.0.0.1:8000. Frontend details are in [frontend/README.md](frontend/README.md).
+
 **Hackathon polish update:** per-sound respiratory selection safeguards, merged session timelines, deterministic activity summaries, measured live microphone levels, complete-session exports and refreshed desktop/mobile UI are implemented. **36 tests pass**, plus real inference/socket and Chrome acceptance checks. See [demonstration instructions and current verification](docs/hackathon-readiness.md). Detection heuristics remain unvalidated; no clinical accuracy is claimed. The Phase 3 notes below are preserved as historical context.
 
 The existing classifier is now integrated with a local FastAPI server, SQLite session history, and a browser frontend. The frontend supports file analysis, microphone capture through AudioWorklet, live results, session export and deletion. Raw microphone audio is not saved. File uploads use temporary storage and are deleted after processing. Read the current [integration verification](docs/phase3-verification.md) for actual test results and remaining limitations.
